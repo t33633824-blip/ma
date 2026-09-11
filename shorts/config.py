@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     writer_polish: bool = True  # второй проход той же модели: грамматика, живость, хронометраж
 
     # TTS
-    tts_provider: Literal["piper", "edge", "elevenlabs"] = "piper"
+    tts_provider: Literal["piper", "edge", "elevenlabs", "yandex"] = "piper"
     piper_voice: str = "ru_RU-irina-medium"
     piper_dir: Path = Path("models/piper")
     piper_length_scale: float = 0.92  # <1 быстрее и бодрее, >1 медленнее
@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     pause_threshold_db: float = -38.0
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""
+    elevenlabs_model: str = "eleven_multilingual_v2"
+    elevenlabs_stability: float = 0.45
+    elevenlabs_similarity: float = 0.8
+    elevenlabs_style: float = 0.3
+    elevenlabs_speed: float = 1.05
+    yandex_api_key: str = ""
+    yandex_voice: str = "marina"
+    yandex_emotion: str = ""
+    yandex_speed: float = 1.05
 
     # Alignment
     whisper_model: str = "small"

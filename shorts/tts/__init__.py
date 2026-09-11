@@ -16,5 +16,17 @@ def get_tts(settings: Settings) -> TTS:
     if settings.tts_provider == "elevenlabs":
         from .elevenlabs_tts import ElevenLabsTTS
 
-        return ElevenLabsTTS(settings.elevenlabs_api_key, settings.elevenlabs_voice_id)
+        return ElevenLabsTTS(
+            settings.elevenlabs_api_key,
+            settings.elevenlabs_voice_id,
+            settings.elevenlabs_model,
+            settings.elevenlabs_stability,
+            settings.elevenlabs_similarity,
+            settings.elevenlabs_style,
+            settings.elevenlabs_speed,
+        )
+    if settings.tts_provider == "yandex":
+        from .yandex_tts import YandexTTS
+
+        return YandexTTS(settings.yandex_api_key, settings.yandex_voice, settings.yandex_emotion, settings.yandex_speed)
     raise ValueError(f"Неизвестный TTS_PROVIDER: {settings.tts_provider}")

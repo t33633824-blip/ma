@@ -7,7 +7,7 @@
 
 - **Куратор** (Claude с веб-поиском) ищет свежие материалы в RSS-лентах и в интернете, отбирает темы и кладёт их в очередь.
 - **Автор** (локальная модель через Ollama) пишет сценарий, описание и теги, потом сам же вычитывает черновик: грамматика, живость, укладка в хронометраж.
-- **Голос**: edge-tts (бесплатно, живой, сам отдаёт тайминги слов) или Piper (полностью локально, тайминги через faster-whisper). Длинные паузы в озвучке сжимаются автоматически.
+- **Голос**, по естественности: ElevenLabs (платно, лучшие голоса) > Яндекс SpeechKit (очень естественный русский, доступен из России, копейки за ролик) > edge-tts (бесплатно, без ключа) > Piper (полностью локально). Длинные паузы в озвучке сжимаются автоматически.
 - **Источники**: научные RSS-ленты плюс истории с Reddit (строки `story …` в `feeds.txt`), для историй свой промпт рассказчика.
 
 Любую роль можно переключить в `.env`: куратора на Ollama (тогда только RSS, без поиска), автора на Claude, голос на edge-tts или ElevenLabs.
@@ -102,7 +102,7 @@ pytest                                              # тесты
 
 - `CURATOR_PROVIDER=anthropic|ollama`, `CURATOR_WEB_SEARCH`, `CURATOR_DAYS`, `CURATOR_PICKS`, `FEEDS_FILE`
 - `WRITER_PROVIDER=ollama|anthropic`, `OLLAMA_MODEL` (для русского хорошо `qwen2.5:7b`, `qwen2.5:14b`, `gemma3:12b`)
-- `TTS_PROVIDER=piper|edge|elevenlabs`
+- `TTS_PROVIDER=edge|yandex|elevenlabs|piper`, ключи и голоса в `.env.example`
 - `CHANNEL_TOPIC`, `CHANNEL_STYLE`, `TARGET_SECONDS` задают тон и длину сценария
 - `SUBTITLE_WORDS_PER_LINE`, `SUBTITLE_FONT`
 

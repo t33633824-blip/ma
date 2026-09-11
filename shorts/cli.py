@@ -141,7 +141,9 @@ def cmd_doctor(_: argparse.Namespace) -> int:
         voice = s.piper_dir / f"{s.piper_voice}.onnx"
         report(voice.exists(), f"голос {voice}", f"python -m piper.download_voices --download-dir {s.piper_dir} {s.piper_voice}")
     elif s.tts_provider == "elevenlabs":
-        report(bool(s.elevenlabs_api_key and s.elevenlabs_voice_id), "ключ и voice_id ElevenLabs", "заполни .env")
+        report(bool(s.elevenlabs_api_key and s.elevenlabs_voice_id), "ключ и voice_id ElevenLabs", "заполни ELEVENLABS_API_KEY и ELEVENLABS_VOICE_ID в .env")
+    elif s.tts_provider == "yandex":
+        report(bool(s.yandex_api_key), f"ключ Яндекс SpeechKit, голос {s.yandex_voice}", "заполни YANDEX_API_KEY в .env")
     else:
         report(True, f"edge-tts голос {s.edge_voice}")
 
