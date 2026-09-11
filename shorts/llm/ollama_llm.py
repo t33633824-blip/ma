@@ -6,7 +6,7 @@ import httpx
 
 from ..config import Settings
 from ..models import Script, SourceDoc
-from .base import build_prompts, script_json_schema
+from . import base
 
 
 class OllamaLLM:
@@ -21,13 +21,12 @@ class OllamaLLM:
     def _http(self) -> httpx.Client:
         return self._client or httpx.Client(timeout=self.timeout)
 
-    def generate_script(self, doc: SourceDoc, settings: Settings) -> Script:
-        system, user = build_prompts(doc, settings)
+    def complete_json(self, system: str, user: str, schema: dict, temperature: float = 0.7) -> dict:
         payload = {
             "model": self.model,
             "stream": False,
-            "format": script_json_schema(),
-            "options": {"temperature": 0.7},
+            "format": schema,
+            "options": {"temperature": temperature, "num_ctx": 16384},
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -35,8 +34,10 @@ class OllamaLLM:
         }
         resp = self._http().post(f"{self.base_url}/api/chat", json=payload)
         resp.raise_for_status()
-        content = resp.json()["message"]["content"]
-        return Script.model_validate(json.loads(content))
+        return json.loads(resp.json()["message"]["content"])
+
+    def generate_script(self, doc: SourceDoc, settings: Settings) -> Script:
+        return base.generate_script(self, doc, settings)
 
     def is_available(self) -> bool:
         try:

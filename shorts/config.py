@@ -26,12 +26,17 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:7b"
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-5"
+    writer_polish: bool = True  # второй проход той же модели: грамматика, живость, хронометраж
 
     # TTS
     tts_provider: Literal["piper", "edge", "elevenlabs"] = "piper"
     piper_voice: str = "ru_RU-irina-medium"
     piper_dir: Path = Path("models/piper")
+    piper_length_scale: float = 0.92  # <1 быстрее и бодрее, >1 медленнее
+    piper_noise_w: float = 0.9  # больше вариативности длительностей = менее монотонно
     edge_voice: str = "ru-RU-DmitryNeural"
+    edge_rate: str = "+8%"
+    edge_pitch: str = "+0Hz"
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""
 

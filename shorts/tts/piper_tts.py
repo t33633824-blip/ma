@@ -11,9 +11,11 @@ class PiperTTS:
     python -m piper.download_voices --download-dir models/piper ru_RU-irina-medium
     """
 
-    def __init__(self, voices_dir: Path, voice: str):
+    def __init__(self, voices_dir: Path, voice: str, length_scale: float = 1.0, noise_w: float = 0.8):
         self.voices_dir = Path(voices_dir)
         self.voice_name = voice
+        self.length_scale = length_scale
+        self.noise_w = noise_w
         self._voice = None
 
     def _load(self):
@@ -30,8 +32,11 @@ class PiperTTS:
         return self._voice
 
     def synthesize(self, text: str, wav_path: str) -> TTSResult:
+        from piper import SynthesisConfig
+
         voice = self._load()
-        chunks = list(voice.synthesize(text))
+        cfg = SynthesisConfig(length_scale=self.length_scale, noise_w_scale=self.noise_w)
+        chunks = list(voice.synthesize(text, cfg))
         if not chunks:
             raise RuntimeError("Piper не вернул аудио")
         with wave.open(wav_path, "wb") as w:

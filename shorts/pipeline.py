@@ -12,6 +12,7 @@ from .background import pick_background
 from .config import Settings
 from .ffmpeg import media_duration
 from .llm import get_writer
+from .llm.base import write_script
 from .models import Script, SourceDoc, WordTiming
 from .render import render_video
 from .sources import fetch_article, load_text_file
@@ -53,7 +54,7 @@ def make_short(
         doc = load_source(target)
         log.info("Источник: %s (%d символов)", doc.title or doc.url, len(doc.text))
         writer = get_writer(settings)
-        script = writer.generate_script(doc, settings)
+        script = write_script(writer, doc, settings)
         log.info("Сценарий готов: %s", script.title)
 
     work = (out_dir or settings.out_dir) / f"{time.strftime('%Y%m%d-%H%M%S')}-{slugify(script.title)}"

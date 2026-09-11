@@ -8,11 +8,11 @@ def get_tts(settings: Settings) -> TTS:
     if settings.tts_provider == "piper":
         from .piper_tts import PiperTTS
 
-        return PiperTTS(settings.piper_dir, settings.piper_voice)
+        return PiperTTS(settings.piper_dir, settings.piper_voice, settings.piper_length_scale, settings.piper_noise_w)
     if settings.tts_provider == "edge":
         from .edge_tts_ import EdgeTTS
 
-        return EdgeTTS(settings.edge_voice)
+        return EdgeTTS(settings.edge_voice, settings.edge_rate, settings.edge_pitch)
     if settings.tts_provider == "elevenlabs":
         from .elevenlabs_tts import ElevenLabsTTS
 

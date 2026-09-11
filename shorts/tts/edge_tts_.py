@@ -10,8 +10,10 @@ from ..models import TTSResult, WordTiming
 class EdgeTTS:
     """Бесплатная облачная озвучка Microsoft. Отдаёт границы слов сама, whisper не нужен."""
 
-    def __init__(self, voice: str):
+    def __init__(self, voice: str, rate: str = "+0%", pitch: str = "+0Hz"):
         self.voice = voice
+        self.rate = rate
+        self.pitch = pitch
 
     def synthesize(self, text: str, wav_path: str) -> TTSResult:
         mp3_path = wav_path.rsplit(".", 1)[0] + ".mp3"
@@ -25,7 +27,7 @@ class EdgeTTS:
     async def _run(self, text: str, mp3_path: str) -> list[WordTiming]:
         import edge_tts
 
-        communicate = edge_tts.Communicate(text, self.voice)
+        communicate = edge_tts.Communicate(text, self.voice, rate=self.rate, pitch=self.pitch, boundary="WordBoundary")
         words: list[WordTiming] = []
         with open(mp3_path, "wb") as f:
             async for chunk in communicate.stream():
