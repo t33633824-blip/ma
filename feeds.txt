@@ -6,4 +6,5 @@ https://www.quantamagazine.org/feed/
 https://www.technologyreview.com/feed/
 https://feeds.arstechnica.com/arstechnica/science
 https://www.nature.com/nature.rss
-https://www.newscientist.com/feed/home/
+https://www.nasa.gov/feed/
+https://feeds.bbci.co.uk/news/science_and_environment/rss.xml
