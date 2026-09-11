@@ -47,11 +47,16 @@ def align_script_to_timings(script_words: list[str], heard: list[WordTiming], to
             for k in range(i2 - i1):
                 starts[i1 + k] = heard[j1 + k].start
                 ends[i1 + k] = heard[j1 + k].end
-        elif tag == "replace" and (i2 - i1) == (j2 - j1):
-            # одинаковое число слов, whisper просто расслышал иначе: доверяем времени
-            for k in range(i2 - i1):
-                starts[i1 + k] = heard[j1 + k].start
-                ends[i1 + k] = heard[j1 + k].end
+        elif tag == "replace":
+            # слова не совпали (расслышано иначе или сокращение озвучено несколькими словами):
+            # делим время диапазона распознанных слов между словами сценария пропорционально
+            span_start = heard[j1].start
+            span_end = heard[j2 - 1].end
+            n_script = i2 - i1
+            step = (span_end - span_start) / n_script
+            for k in range(n_script):
+                starts[i1 + k] = span_start + k * step
+                ends[i1 + k] = span_start + (k + 1) * step
 
     result: list[WordTiming] = []
     i = 0

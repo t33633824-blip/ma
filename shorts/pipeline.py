@@ -19,6 +19,7 @@ from .render import render_video
 from .sources import fetch_article, load_text_file
 from .subtitles import SubtitleStyle, build_ass
 from .tts import get_tts
+from .tts.normalize import normalize_for_tts
 
 log = logging.getLogger(__name__)
 
@@ -65,10 +66,13 @@ def make_short(
 
     narration = script.narration
     (work / "narration.txt").write_text(narration, encoding="utf-8")
+    tts_text = normalize_for_tts(narration)
+    if tts_text != narration:
+        (work / "narration_tts.txt").write_text(tts_text, encoding="utf-8")
     raw_wav = str(work / "voice_raw.wav")
     wav = str(work / "voice.wav")
     tts = get_tts(settings)
-    tts_result = tts.synthesize(narration, raw_wav)
+    tts_result = tts.synthesize(tts_text, raw_wav)
     raw_duration = media_duration(raw_wav)
     cuts = compress_pauses(raw_wav, wav, settings.pause_max_seconds, settings.pause_threshold_db)
     duration = media_duration(wav)

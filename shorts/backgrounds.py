@@ -80,18 +80,23 @@ def _glow(img: Image.Image, radius: int = 18) -> np.ndarray:
     return np.asarray(img.filter(ImageFilter.GaussianBlur(radius)), dtype=np.float32) * 0.9
 
 
-def _bounce_in_ring(b: Ball, cx: float, cy: float, ring_r: float) -> bool:
+def _bounce_in_ring(b: Ball, cx: float, cy: float, ring_r: float, restitution: float = 1.0) -> bool:
+    """Отражение от кольца. Отражаем только если шарик летит наружу, иначе при касании
+    на нескольких кадрах подряд скорость переворачивается дважды и шарик «залипает» у стенки."""
     dx, dy = b.x - cx, b.y - cy
     dist = math.hypot(dx, dy) or 1e-6
     if dist + b.r < ring_r:
         return False
     nx, ny = dx / dist, dy / dist
-    dot = b.vx * nx + b.vy * ny
-    b.vx -= 2 * dot * nx
-    b.vy -= 2 * dot * ny
+    # всегда возвращаем внутрь, чтобы не застревать в стенке
     overlap = dist + b.r - ring_r
     b.x -= nx * overlap
     b.y -= ny * overlap
+    dot = b.vx * nx + b.vy * ny
+    if dot <= 0:
+        return False
+    b.vx -= (1 + restitution) * dot * nx
+    b.vy -= (1 + restitution) * dot * ny
     return True
 
 
@@ -103,7 +108,7 @@ def _scene_bounce(enc: _Encoder, rng: random.Random, seconds: float, width: int,
     ring_r = min(width, height) * 0.44
     gravity = 0.55
     objs = [
-        Ball(cx + rng.uniform(-ring_r * 0.4, ring_r * 0.4), cy + rng.uniform(-ring_r * 0.4, 0), rng.uniform(-6, 6), rng.uniform(-3, 3), rng.uniform(16, 24), rng.random())
+        Ball(cx + rng.uniform(-ring_r * 0.4, ring_r * 0.4), cy - ring_r * rng.uniform(0.2, 0.6), rng.uniform(-9, 9), rng.uniform(-4, 4), rng.uniform(16, 24), rng.random())
         for _ in range(balls)
     ]
     ring_hue = rng.random()
@@ -120,9 +125,7 @@ def _scene_bounce(enc: _Encoder, rng: random.Random, seconds: float, width: int,
             b.vy += gravity
             b.x += b.vx
             b.y += b.vy
-            if _bounce_in_ring(b, cx, cy, ring_r):
-                b.vx *= 1.002
-                b.vy *= 1.002
+            if _bounce_in_ring(b, cx, cy, ring_r, restitution=1.03):
                 b.hue += 0.07
                 if b.grow > 0:
                     b.r += 1.4
@@ -136,6 +139,9 @@ def _scene_bounce(enc: _Encoder, rng: random.Random, seconds: float, width: int,
             if speed > 26:  # не даём разогнаться до мельтешения
                 b.vx *= 26 / speed
                 b.vy *= 26 / speed
+            elif speed < 6 and b.y > cy:  # почти остановился внизу: подбрасываем
+                b.vy -= 14
+                b.vx += rng.uniform(-4, 4)
             draw.ellipse((b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r), fill=_hsv(b.hue))
         arr = np.asarray(layer, dtype=np.float32)
         trail = np.maximum(trail, arr)
@@ -168,7 +174,10 @@ def _scene_split(enc: _Encoder, rng: random.Random, seconds: float, width: int, 
             if speed > 24:
                 b.vx *= 24 / speed
                 b.vy *= 24 / speed
-            if _bounce_in_ring(b, cx, cy, ring_r) and len(objs) + len(spawned) < max_balls:
+            if speed < 6 and b.y > cy:
+                b.vy -= 14
+                b.vx += rng.uniform(-4, 4)
+            if _bounce_in_ring(b, cx, cy, ring_r, restitution=1.02) and len(objs) + len(spawned) < max_balls:
                 ang = rng.uniform(0, math.tau)
                 spd = speed * rng.uniform(0.7, 1.1)
                 spawned.append(Ball(b.x, b.y, math.cos(ang) * spd, math.sin(ang) * spd, max(14, b.r * 0.95), b.hue + rng.uniform(0.05, 0.15)))
