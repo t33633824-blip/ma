@@ -8,3 +8,10 @@ https://feeds.arstechnica.com/arstechnica/science
 https://www.nature.com/nature.rss
 https://www.nasa.gov/feed/
 https://feeds.bbci.co.uk/news/science_and_environment/rss.xml
+
+# Истории с Reddit (префикс story). Лучшее за неделю, посты с полным текстом.
+story https://www.reddit.com/r/tifu/top/.rss?t=week
+story https://www.reddit.com/r/AmItheAsshole/top/.rss?t=week
+story https://www.reddit.com/r/TrueOffMyChest/top/.rss?t=week
+story https://www.reddit.com/r/pettyrevenge/top/.rss?t=week
+story https://www.reddit.com/r/MaliciousCompliance/top/.rss?t=week

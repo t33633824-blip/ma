@@ -11,6 +11,7 @@ class SourceDoc(BaseModel):
     url: str
     title: str = ""
     text: str
+    kind: str = "article"  # article | story (история с Reddit)
 
 
 class Script(BaseModel):

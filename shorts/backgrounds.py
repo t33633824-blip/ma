@@ -1,4 +1,10 @@
-"""Фоновые видео: сгенерировать «залипательную» анимацию или скачать бесплатные стоковые ролики."""
+"""Фоновые видео: сгенерировать «залипательную» анимацию или скачать бесплатные стоковые ролики.
+
+Сцены генератора:
+- bounce: шарики скачут в кольце, растут и меняют цвет при ударе;
+- split:  один шарик при каждом ударе рождает ещё один, пока экран не заполнится, потом всё начинается заново;
+- flow:   сотни частиц текут по невидимому полю, оставляя светящиеся следы.
+"""
 from __future__ import annotations
 
 import colorsys
@@ -11,14 +17,16 @@ from pathlib import Path
 
 import httpx
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 from .ffmpeg import ffmpeg_exe
 
 log = logging.getLogger(__name__)
 
+SCENES = ("bounce", "split", "flow")
 
-# ---------------------------------------------------------------- генератор
+
+# ---------------------------------------------------------------- общая часть
 
 
 @dataclass
@@ -36,8 +44,175 @@ def _hsv(h: float, s: float = 0.9, v: float = 1.0) -> tuple[int, int, int]:
     return int(r * 255), int(g * 255), int(b * 255)
 
 
-def generate_bouncing(
+def _gradient_bg(width: int, height: int, hue: float) -> np.ndarray:
+    """Тёмный вертикальный градиент вместо чёрного: картинка выглядит дороже."""
+    top = np.array(_hsv(hue, 0.6, 0.16), dtype=np.float32)
+    bottom = np.array(_hsv(hue + 0.08, 0.7, 0.05), dtype=np.float32)
+    t = np.linspace(0, 1, height, dtype=np.float32)[:, None, None]
+    return top * (1 - t) + bottom * t + np.zeros((height, width, 3), dtype=np.float32)
+
+
+class _Encoder:
+    def __init__(self, out_path: str, width: int, height: int, fps: int):
+        cmd = [
+            ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps), "-i", "-",
+            "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart", out_path,
+        ]
+        self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+
+    def write(self, frame: np.ndarray) -> None:
+        assert self.proc.stdin is not None
+        self.proc.stdin.write(np.clip(frame, 0, 255).astype(np.uint8).tobytes())
+
+    def close(self) -> None:
+        assert self.proc.stdin is not None
+        self.proc.stdin.close()
+        self.proc.wait()
+        if self.proc.returncode != 0:
+            raise RuntimeError("ffmpeg не смог записать сгенерированный фон")
+
+
+def _glow(img: Image.Image, radius: int = 18) -> np.ndarray:
+    """Слой свечения: размытая копия, которую складываем с картинкой."""
+    return np.asarray(img.filter(ImageFilter.GaussianBlur(radius)), dtype=np.float32) * 0.9
+
+
+def _bounce_in_ring(b: Ball, cx: float, cy: float, ring_r: float) -> bool:
+    dx, dy = b.x - cx, b.y - cy
+    dist = math.hypot(dx, dy) or 1e-6
+    if dist + b.r < ring_r:
+        return False
+    nx, ny = dx / dist, dy / dist
+    dot = b.vx * nx + b.vy * ny
+    b.vx -= 2 * dot * nx
+    b.vy -= 2 * dot * ny
+    overlap = dist + b.r - ring_r
+    b.x -= nx * overlap
+    b.y -= ny * overlap
+    return True
+
+
+# ---------------------------------------------------------------- сцены
+
+
+def _scene_bounce(enc: _Encoder, rng: random.Random, seconds: float, width: int, height: int, fps: int, balls: int) -> None:
+    cx, cy = width / 2, height / 2
+    ring_r = min(width, height) * 0.44
+    gravity = 0.55
+    objs = [
+        Ball(cx + rng.uniform(-ring_r * 0.4, ring_r * 0.4), cy + rng.uniform(-ring_r * 0.4, 0), rng.uniform(-6, 6), rng.uniform(-3, 3), rng.uniform(16, 24), rng.random())
+        for _ in range(balls)
+    ]
+    ring_hue = rng.random()
+    bg = _gradient_bg(width, height, ring_hue + 0.5)
+    trail = np.zeros((height, width, 3), dtype=np.float32)
+    max_r = ring_r * 0.28
+    for frame in range(int(seconds * fps)):
+        trail *= 0.92
+        layer = Image.new("RGB", (width, height))
+        draw = ImageDraw.Draw(layer)
+        ring_hue += 0.0007
+        draw.ellipse((cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r), outline=_hsv(ring_hue, 0.6, 1.0), width=10)
+        for b in objs:
+            b.vy += gravity
+            b.x += b.vx
+            b.y += b.vy
+            if _bounce_in_ring(b, cx, cy, ring_r):
+                b.vx *= 1.002
+                b.vy *= 1.002
+                b.hue += 0.07
+                b.r = b.r + 1.4 if b.r < max_r else rng.uniform(16, 24)
+            draw.ellipse((b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r), fill=_hsv(b.hue))
+        arr = np.asarray(layer, dtype=np.float32)
+        trail = np.maximum(trail, arr)
+        enc.write(bg + trail + _glow(layer))
+        _progress(frame, fps, seconds)
+
+
+def _scene_split(enc: _Encoder, rng: random.Random, seconds: float, width: int, height: int, fps: int, max_balls: int = 60) -> None:
+    cx, cy = width / 2, height / 2
+    ring_r = min(width, height) * 0.44
+    gravity = 0.5
+    base_hue = rng.random()
+    bg = _gradient_bg(width, height, base_hue + 0.5)
+    trail = np.zeros((height, width, 3), dtype=np.float32)
+
+    def fresh() -> list[Ball]:
+        return [Ball(cx, cy - ring_r * 0.3, rng.uniform(-4, 4), 0.0, 22, base_hue)]
+
+    objs = fresh()
+    for frame in range(int(seconds * fps)):
+        trail *= 0.9
+        layer = Image.new("RGB", (width, height))
+        draw = ImageDraw.Draw(layer)
+        draw.ellipse((cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r), outline=_hsv(base_hue + frame * 0.0005, 0.5, 1.0), width=10)
+        spawned: list[Ball] = []
+        for b in objs:
+            b.vy += gravity
+            b.x += b.vx
+            b.y += b.vy
+            if _bounce_in_ring(b, cx, cy, ring_r) and len(objs) + len(spawned) < max_balls:
+                ang = rng.uniform(0, math.tau)
+                spd = math.hypot(b.vx, b.vy) * rng.uniform(0.7, 1.1)
+                spawned.append(Ball(b.x, b.y, math.cos(ang) * spd, math.sin(ang) * spd, max(10, b.r * 0.92), b.hue + rng.uniform(0.05, 0.15)))
+            draw.ellipse((b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r), fill=_hsv(b.hue))
+        objs.extend(spawned)
+        if len(objs) >= max_balls and frame % (fps * 4) == 0:
+            objs = fresh()  # экран заполнился, начинаем заново
+        arr = np.asarray(layer, dtype=np.float32)
+        trail = np.maximum(trail, arr)
+        enc.write(bg + trail + _glow(layer, 14))
+        _progress(frame, fps, seconds)
+
+
+def _scene_flow(enc: _Encoder, rng: random.Random, seconds: float, width: int, height: int, fps: int, particles: int = 700) -> None:
+    hue0 = rng.random()
+    bg = _gradient_bg(width, height, hue0 + 0.5)
+    trail = np.zeros((height, width, 3), dtype=np.float32)
+    px = np.array([rng.uniform(0, width) for _ in range(particles)], dtype=np.float32)
+    py = np.array([rng.uniform(0, height) for _ in range(particles)], dtype=np.float32)
+    phase = [rng.uniform(0, math.tau) for _ in range(4)]
+    k = [rng.uniform(0.002, 0.005) for _ in range(4)]
+    speed = 3.2
+    for frame in range(int(seconds * fps)):
+        t = frame / fps
+        # плавно меняющееся поле направлений из суммы синусов
+        ang = (
+            np.sin(px * k[0] + phase[0] + t * 0.25)
+            + np.cos(py * k[1] + phase[1] - t * 0.2)
+            + np.sin((px + py) * k[2] + phase[2] + t * 0.15)
+        ) * math.pi
+        px += np.cos(ang) * speed
+        py += np.sin(ang) * speed
+        out = (px < 0) | (px >= width) | (py < 0) | (py >= height)
+        n_out = int(out.sum())
+        if n_out:
+            px[out] = np.array([rng.uniform(0, width) for _ in range(n_out)], dtype=np.float32)
+            py[out] = np.array([rng.uniform(0, height) for _ in range(n_out)], dtype=np.float32)
+        trail *= 0.955
+        layer = Image.new("RGB", (width, height))
+        draw = ImageDraw.Draw(layer)
+        hue = hue0 + t * 0.02
+        for i in range(particles):
+            h = hue + (py[i] / height) * 0.25
+            x, y = float(px[i]), float(py[i])
+            draw.ellipse((x - 3, y - 3, x + 3, y + 3), fill=_hsv(h, 0.8, 1.0))
+        arr = np.asarray(layer, dtype=np.float32)
+        trail = np.maximum(trail, arr)
+        enc.write(bg + trail + _glow(layer, 10))
+        _progress(frame, fps, seconds)
+
+
+def _progress(frame: int, fps: int, seconds: float) -> None:
+    if frame and frame % (fps * 30) == 0:
+        log.info("Генерация фона: %d/%d с", frame // fps, int(seconds))
+
+
+def generate_background(
     out_path: str,
+    scene: str = "random",
     seconds: float = 180.0,
     width: int = 1080,
     height: int = 1920,
@@ -45,83 +220,28 @@ def generate_bouncing(
     seed: int | None = None,
     balls: int = 3,
 ) -> str:
-    """Шарики скачут внутри кольца, растут и меняют цвет при каждом ударе, оставляют тающий след.
-
-    Классический «залипательный» фон без чужих прав: всё нарисовано кодом.
-    """
     rng = random.Random(seed)
-    cx, cy = width / 2, height / 2
-    ring_r = min(width, height) * 0.42
-    gravity = 0.55
-    trail = 0.93  # доля яркости следа, остающаяся на следующем кадре
-
-    objs = [
-        Ball(
-            x=cx + rng.uniform(-ring_r * 0.4, ring_r * 0.4),
-            y=cy + rng.uniform(-ring_r * 0.4, 0),
-            vx=rng.uniform(-6, 6),
-            vy=rng.uniform(-3, 3),
-            r=rng.uniform(14, 22),
-            hue=rng.random(),
-        )
-        for _ in range(balls)
-    ]
-    ring_hue = rng.random()
-    canvas = np.zeros((height, width, 3), dtype=np.float32)
-
-    cmd = [
-        ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
-        "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps), "-i", "-",
-        "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart", out_path,
-    ]
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-    assert proc.stdin is not None
-    total_frames = int(seconds * fps)
-    max_r = ring_r * 0.28
+    if scene == "random":
+        scene = rng.choice(SCENES)
+    if scene not in SCENES:
+        raise ValueError(f"Неизвестная сцена {scene}, доступны: {', '.join(SCENES)}")
+    log.info("Сцена: %s", scene)
+    enc = _Encoder(out_path, width, height, fps)
     try:
-        for frame in range(total_frames):
-            canvas *= trail
-            img = Image.fromarray(canvas.astype(np.uint8))
-            draw = ImageDraw.Draw(img)
-            ring_hue += 0.0007
-            draw.ellipse(
-                (cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r),
-                outline=_hsv(ring_hue, 0.6, 1.0), width=8,
-            )
-            for b in objs:
-                b.vy += gravity
-                b.x += b.vx
-                b.y += b.vy
-                dx, dy = b.x - cx, b.y - cy
-                dist = math.hypot(dx, dy) or 1e-6
-                if dist + b.r >= ring_r:
-                    nx, ny = dx / dist, dy / dist
-                    dot = b.vx * nx + b.vy * ny
-                    b.vx -= 2 * dot * nx
-                    b.vy -= 2 * dot * ny
-                    b.vx *= 1.002
-                    b.vy *= 1.002
-                    overlap = dist + b.r - ring_r
-                    b.x -= nx * overlap
-                    b.y -= ny * overlap
-                    b.hue += 0.07
-                    if b.r < max_r:
-                        b.r += 1.2
-                    else:
-                        b.r = rng.uniform(14, 22)  # шарик «лопается» и растёт заново
-                draw.ellipse((b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r), fill=_hsv(b.hue))
-            frame_arr = np.asarray(img, dtype=np.float32)
-            canvas = np.maximum(canvas, frame_arr)
-            proc.stdin.write(canvas.astype(np.uint8).tobytes())
-            if frame % (fps * 30) == 0 and frame:
-                log.info("Генерация фона: %d/%d с", frame // fps, int(seconds))
+        if scene == "bounce":
+            _scene_bounce(enc, rng, seconds, width, height, fps, balls)
+        elif scene == "split":
+            _scene_split(enc, rng, seconds, width, height, fps)
+        else:
+            _scene_flow(enc, rng, seconds, width, height, fps)
     finally:
-        proc.stdin.close()
-        proc.wait()
-    if proc.returncode != 0:
-        raise RuntimeError("ffmpeg не смог записать сгенерированный фон")
+        enc.close()
     return out_path
+
+
+def generate_bouncing(out_path: str, seconds: float = 180.0, width: int = 1080, height: int = 1920, fps: int = 30, seed: int | None = None, balls: int = 3) -> str:
+    """Совместимость со старым именем."""
+    return generate_background(out_path, "bounce", seconds, width, height, fps, seed, balls)
 
 
 # ---------------------------------------------------------------- стоковые видео (Pexels)

@@ -8,6 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .align import align_script_to_timings, split_words, transcribe_words
+from .audio import compress_pauses, remap_words
 from .background import pick_background
 from .config import Settings
 from .ffmpeg import media_duration
@@ -64,15 +65,18 @@ def make_short(
 
     narration = script.narration
     (work / "narration.txt").write_text(narration, encoding="utf-8")
+    raw_wav = str(work / "voice_raw.wav")
     wav = str(work / "voice.wav")
     tts = get_tts(settings)
-    tts_result = tts.synthesize(narration, wav)
+    tts_result = tts.synthesize(narration, raw_wav)
+    raw_duration = media_duration(raw_wav)
+    cuts = compress_pauses(raw_wav, wav, settings.pause_max_seconds, settings.pause_threshold_db)
     duration = media_duration(wav)
-    log.info("Озвучка: %.1f c (%s)", duration, settings.tts_provider)
+    log.info("Озвучка: %.1f c (%s), после сжатия пауз %.1f c, вырезано %d пауз", raw_duration, settings.tts_provider, duration, len(cuts))
 
     script_words = split_words(narration)
     if tts_result.words:
-        heard = tts_result.words
+        heard = remap_words(tts_result.words, cuts)
     else:
         log.info("Тайминги слов через faster-whisper (%s)…", settings.whisper_model)
         heard = transcribe_words(wav, settings.whisper_model, str(settings.whisper_dir))

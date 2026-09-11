@@ -2,7 +2,7 @@ import json
 
 import httpx
 
-from shorts.backgrounds import best_portrait_file, fetch_pexels
+from shorts.backgrounds import best_portrait_file, fetch_pexels, generate_background
 
 VIDEO = {
     "id": 42,
@@ -36,3 +36,12 @@ def test_fetch_pexels_downloads_and_skips_short(tmp_path):
     saved = fetch_pexels("satisfying", 3, "KEY", tmp_path, client=client)
     assert [p.name for p in saved] == ["pexels-42.mp4"]
     assert (tmp_path / "pexels-42.mp4").read_bytes() == b"MP4DATA"
+
+
+def test_generate_each_scene_short(tmp_path):
+    from shorts.ffmpeg import media_duration
+
+    for scene in ("bounce", "split", "flow"):
+        out = tmp_path / f"{scene}.mp4"
+        generate_background(str(out), scene=scene, seconds=1, width=270, height=480, fps=10, seed=1)
+        assert abs(media_duration(str(out)) - 1.0) < 0.2

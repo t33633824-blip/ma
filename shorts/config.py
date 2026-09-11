@@ -34,9 +34,13 @@ class Settings(BaseSettings):
     piper_dir: Path = Path("models/piper")
     piper_length_scale: float = 0.92  # <1 быстрее и бодрее, >1 медленнее
     piper_noise_w: float = 0.9  # больше вариативности длительностей = менее монотонно
-    edge_voice: str = "ru-RU-DmitryNeural"
-    edge_rate: str = "+8%"
+    edge_voice: str = "ru-RU-SvetlanaNeural"
+    edge_rate: str = "+10%"
     edge_pitch: str = "+0Hz"
+
+    # Паузы: всё длиннее max сжимается до max секунд
+    pause_max_seconds: float = 0.3
+    pause_threshold_db: float = -38.0
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""
 

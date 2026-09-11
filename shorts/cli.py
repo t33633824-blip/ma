@@ -83,15 +83,15 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_backgrounds(args: argparse.Namespace) -> int:
-    from .backgrounds import fetch_pexels, generate_bouncing
+    from .backgrounds import fetch_pexels, generate_background
 
     settings = load_settings()
     settings.gameplay_dir.mkdir(parents=True, exist_ok=True)
     if args.action == "generate":
         for i in range(args.count):
             seed = (args.seed + i) if args.seed is not None else None
-            dest = settings.gameplay_dir / f"generated-{int(__import__('time').time())}-{i}.mp4"
-            generate_bouncing(str(dest), seconds=args.minutes * 60, width=settings.video_width, height=settings.video_height, seed=seed, balls=args.balls)
+            dest = settings.gameplay_dir / f"generated-{args.scene}-{int(__import__('time').time())}-{i}.mp4"
+            generate_background(str(dest), scene=args.scene, seconds=args.minutes * 60, width=settings.video_width, height=settings.video_height, seed=seed, balls=args.balls)
             print(dest)
         return 0
     saved = fetch_pexels(args.query, args.count, settings.pexels_api_key, settings.gameplay_dir)
@@ -189,7 +189,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p_bg = sub.add_parser("backgrounds", help="сделать или скачать фоновые видео")
     bg_sub = p_bg.add_subparsers(dest="action", required=True)
-    p_gen = bg_sub.add_parser("generate", help="нарисовать залипательную анимацию (шарики в кольце)")
+    p_gen = bg_sub.add_parser("generate", help="нарисовать залипательную анимацию")
+    p_gen.add_argument("--scene", default="random", choices=["random", "bounce", "split", "flow"], help="bounce: шарики в кольце; split: шарик делится при ударе; flow: поток частиц")
     p_gen.add_argument("--minutes", type=float, default=3.0, help="длина одного файла в минутах")
     p_gen.add_argument("--count", type=int, default=1, help="сколько файлов сделать")
     p_gen.add_argument("--balls", type=int, default=3)

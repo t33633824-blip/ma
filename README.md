@@ -7,7 +7,8 @@
 
 - **Куратор** (Claude с веб-поиском) ищет свежие материалы в RSS-лентах и в интернете, отбирает темы и кладёт их в очередь.
 - **Автор** (локальная модель через Ollama) пишет сценарий, описание и теги, потом сам же вычитывает черновик: грамматика, живость, укладка в хронометраж.
-- **Голос**: edge-tts (бесплатно, живой, сам отдаёт тайминги слов) или Piper (полностью локально, тайминги через faster-whisper).
+- **Голос**: edge-tts (бесплатно, живой, сам отдаёт тайминги слов) или Piper (полностью локально, тайминги через faster-whisper). Длинные паузы в озвучке сжимаются автоматически.
+- **Источники**: научные RSS-ленты плюс истории с Reddit (строки `story …` в `feeds.txt`), для историй свой промпт рассказчика.
 
 Любую роль можно переключить в `.env`: куратора на Ollama (тогда только RSS, без поиска), автора на Claude, голос на edge-tts или ElevenLabs.
 
@@ -37,7 +38,7 @@ pip install -e ".[dev]"
 # 2. Русский голос Piper (один раз, ~60 МБ)
 python -m piper.download_voices --download-dir models/piper ru_RU-irina-medium
 # 3. Фоновые видео в assets/gameplay/ — любой из трёх способов:
-python -m shorts backgrounds generate --minutes 3 --count 3   # нарисовать залипательную анимацию (без чужих прав)
+python -m shorts backgrounds generate --minutes 3 --count 3   # анимация: --scene bounce | split | flow | random
 python -m shorts backgrounds fetch --query satisfying --count 10   # бесплатные стоковые с Pexels (нужен PEXELS_API_KEY)
 #    или свои записи геймплея (см. assets/gameplay/README.md)
 
