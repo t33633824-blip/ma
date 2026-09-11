@@ -14,6 +14,7 @@ dependencies = [
     "anthropic>=1.5",
     "imageio-ffmpeg>=0.5",
     "feedparser>=6",
+    "pillow>=10",
 ]
 
 [project.optional-dependencies]

@@ -20,7 +20,10 @@ pip install -e ".[dev]"
 #    https://ollama.com  → ollama pull qwen2.5:7b
 # 2. Русский голос Piper (один раз, ~60 МБ)
 python -m piper.download_voices --download-dir models/piper ru_RU-irina-medium
-# 3. Свои записи геймплея в assets/gameplay/*.mp4 (см. assets/gameplay/README.md)
+# 3. Фоновые видео в assets/gameplay/ — любой из трёх способов:
+python -m shorts backgrounds generate --minutes 3 --count 3   # нарисовать залипательную анимацию (без чужих прав)
+python -m shorts backgrounds fetch --query satisfying --count 10   # бесплатные стоковые с Pexels (нужен PEXELS_API_KEY)
+#    или свои записи геймплея (см. assets/gameplay/README.md)
 
 cp .env.example .env      # впиши ANTHROPIC_API_KEY для куратора, поправь тему канала
 python -m shorts doctor   # проверит, что всё на месте
@@ -58,7 +61,8 @@ llm/         ─ сценарий по строгой JSON-схеме: Ollama (�
 tts/         ─ голос: Piper (локально), edge-tts (бесплатно, облако), ElevenLabs (платно)
 align.py     ─ тайминги слов: faster-whisper слушает озвучку, слова сценария получают время
 subtitles.py ─ ASS-субтитры по 3 слова, текущее слово подсвечено
-background.py─ случайный фрагмент случайного геймплея из assets/gameplay
+backgrounds.py─ генератор анимации «шарики в кольце» и загрузчик стоковых роликов с Pexels
+background.py─ случайный фрагмент случайного файла из assets/gameplay
 render.py    ─ ffmpeg: кроп до 9:16, наложение субтитров, микс с голосом
 pipeline.py  ─ склейка шагов, все промежуточные файлы сохраняются
 ```

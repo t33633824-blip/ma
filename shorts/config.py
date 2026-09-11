@@ -41,6 +41,7 @@ class Settings(BaseSettings):
 
     # Video
     gameplay_dir: Path = Path("assets/gameplay")
+    pexels_api_key: str = ""
     out_dir: Path = Path("out")
     video_width: int = 1080
     video_height: int = 1920
