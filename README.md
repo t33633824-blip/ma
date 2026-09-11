@@ -3,8 +3,12 @@
 Автоматический конвейер вертикальных роликов: западная статья → пересказ на русском своими словами →
 озвучка → субтитры по словам → готовый MP4 9:16 с геймплеем на фоне.
 
-По умолчанию всё работает **локально**: Ollama для сценария, Piper для голоса, faster-whisper для таймингов.
-Облачные варианты (Claude, edge-tts, ElevenLabs) включаются одной строкой в `.env`.
+Роли разделены:
+
+- **Куратор** (Claude с веб-поиском) ищет свежие материалы в RSS-лентах и в интернете, отбирает темы и кладёт их в очередь.
+- **Автор** (локальная модель через Ollama) пишет сценарий, описание и теги. Piper озвучивает, faster-whisper снимает тайминги.
+
+Любую роль можно переключить в `.env`: куратора на Ollama (тогда только RSS, без поиска), автора на Claude, голос на edge-tts или ElevenLabs.
 
 ## Быстрый старт
 
@@ -18,10 +22,16 @@ pip install -e ".[dev]"
 python -m piper.download_voices --download-dir models/piper ru_RU-irina-medium
 # 3. Свои записи геймплея в assets/gameplay/*.mp4 (см. assets/gameplay/README.md)
 
-cp .env.example .env      # при желании поправь тему канала и провайдеров
+cp .env.example .env      # впиши ANTHROPIC_API_KEY для куратора, поправь тему канала
 python -m shorts doctor   # проверит, что всё на месте
-python -m shorts make https://example.com/some-article
+
+python -m shorts discover        # куратор: RSS + веб-поиск → 5 тем в queue.json
+python -m shorts queue           # посмотреть очередь
+python -m shorts run --count 3   # автор + озвучка + рендер по трём лучшим темам
+python -m shorts make https://example.com/some-article   # или один ролик по конкретной ссылке
 ```
+
+Для полного автопилота повесь в cron раз в день `discover`, затем `run --count 3`.
 
 Результат лежит в `out/<дата>-<заголовок>/`:
 
@@ -40,6 +50,9 @@ python -m shorts make https://example.com/some-article
 ## Как это устроено
 
 ```
+feeds.py     ─ RSS-ленты из feeds.txt: свежие записи, без дублей
+curator.py   ─ куратор: Claude ищет в интернете и ранжирует кандидатов (или Ollama только ранжирует)
+queue.py     ─ очередь тем в queue.json, она же история: сделанное не предлагается снова
 sources.py   ─ скачать статью, вычистить меню и рекламу (trafilatura)
 llm/         ─ сценарий по строгой JSON-схеме: Ollama (локально) или Claude
 tts/         ─ голос: Piper (локально), edge-tts (бесплатно, облако), ElevenLabs (платно)
@@ -66,7 +79,8 @@ pytest                                              # тесты
 
 Все параметры описаны в `.env.example`. Главные:
 
-- `LLM_PROVIDER=ollama|anthropic`, `OLLAMA_MODEL` (для русского хорошо `qwen2.5:7b`, `qwen2.5:14b`, `gemma3:12b`)
+- `CURATOR_PROVIDER=anthropic|ollama`, `CURATOR_WEB_SEARCH`, `CURATOR_DAYS`, `CURATOR_PICKS`, `FEEDS_FILE`
+- `WRITER_PROVIDER=ollama|anthropic`, `OLLAMA_MODEL` (для русского хорошо `qwen2.5:7b`, `qwen2.5:14b`, `gemma3:12b`)
 - `TTS_PROVIDER=piper|edge|elevenlabs`
 - `CHANNEL_TOPIC`, `CHANNEL_STYLE`, `TARGET_SECONDS` задают тон и длину сценария
 - `SUBTITLE_WORDS_PER_LINE`, `SUBTITLE_FONT`
@@ -79,7 +93,6 @@ pytest                                              # тесты
 
 ## Что дальше
 
-- Автосбор источников: RSS, транскрипты YouTube, Reddit.
-- Отбор тем нейросетью и очередь на 3 ролика в день.
+- Транскрипты YouTube и Reddit как дополнительные источники для куратора.
 - Автозагрузка через YouTube Data API, потом TikTok, VK Клипы, Дзен.
 - Обложки и статистика для калибровки крючков.

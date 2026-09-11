@@ -11,7 +11,7 @@ from .align import align_script_to_timings, split_words, transcribe_words
 from .background import pick_background
 from .config import Settings
 from .ffmpeg import media_duration
-from .llm import get_llm
+from .llm import get_writer
 from .models import Script, SourceDoc, WordTiming
 from .render import render_video
 from .sources import fetch_article, load_text_file
@@ -52,8 +52,8 @@ def make_short(
     else:
         doc = load_source(target)
         log.info("Источник: %s (%d символов)", doc.title or doc.url, len(doc.text))
-        llm = get_llm(settings)
-        script = llm.generate_script(doc, settings)
+        writer = get_writer(settings)
+        script = writer.generate_script(doc, settings)
         log.info("Сценарий готов: %s", script.title)
 
     work = (out_dir or settings.out_dir) / f"{time.strftime('%Y%m%d-%H%M%S')}-{slugify(script.title)}"
@@ -94,7 +94,7 @@ def make_short(
         "source_url": doc.url,
         "duration_seconds": round(duration, 2),
         "background": asdict(bg),
-        "llm": settings.llm_provider,
+        "writer": settings.writer_provider,
         "tts": settings.tts_provider,
         "altered_content": True,  # для отметки «изменённый или синтетический контент» при загрузке
         "elapsed_seconds": round(time.time() - t0, 1),

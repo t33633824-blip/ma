@@ -1,0 +1,9 @@
+# RSS-ленты для куратора. Одна ссылка в строке, строки с # игнорируются.
+# Наука и технологии (англоязычные первоисточники)
+https://www.sciencedaily.com/rss/top/science.xml
+https://phys.org/rss-feed/
+https://www.quantamagazine.org/feed/
+https://www.technologyreview.com/feed/
+https://feeds.arstechnica.com/arstechnica/science
+https://www.nature.com/nature.rss
+https://www.newscientist.com/feed/home/

@@ -11,8 +11,17 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # LLM
-    llm_provider: Literal["ollama", "anthropic"] = "ollama"
+    # Куратор: ищет и отбирает темы (по умолчанию Claude с веб-поиском)
+    curator_provider: Literal["anthropic", "ollama"] = "anthropic"
+    curator_model: str = "claude-opus-5"
+    curator_web_search: bool = True
+    curator_days: int = 7
+    curator_picks: int = 5
+    feeds_file: Path = Path("feeds.txt")
+    queue_file: Path = Path("queue.json")
+
+    # Автор: пишет сценарий, описание, теги (по умолчанию локальная модель)
+    writer_provider: Literal["ollama", "anthropic"] = "ollama"
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b"
     anthropic_api_key: str = ""

@@ -24,6 +24,64 @@ def cmd_make(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_discover(args: argparse.Namespace) -> int:
+    from .curator import discover
+
+    settings = load_settings()
+    if args.count:
+        settings.curator_picks = args.count
+    if args.no_web:
+        settings.curator_web_search = False
+    added = discover(settings)
+    print(f"Добавлено тем в очередь: {len(added)} (файл {settings.queue_file})")
+    return 0
+
+
+def cmd_queue(_: argparse.Namespace) -> int:
+    from .queue import Queue
+
+    settings = load_settings()
+    q = Queue(settings.queue_file)
+    if not q.items:
+        print("Очередь пуста. Запусти: python -m shorts discover")
+        return 0
+    for item in sorted(q.items, key=lambda x: (x.status != "pending", -x.score)):
+        mark = {"pending": "·", "done": "✓", "failed": "✗", "skipped": "-"}[item.status]
+        print(f"{mark} [{item.score:2d}] {item.title}\n      {item.url}")
+        if item.video_dir:
+            print(f"      → {item.video_dir}")
+        if item.error:
+            print(f"      ошибка: {item.error[:200]}")
+    return 0
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """Берёт лучшие темы из очереди и делает ролики. Ошибки не останавливают остальные."""
+    from .pipeline import make_short
+    from .queue import Queue
+
+    settings = load_settings()
+    q = Queue(settings.queue_file)
+    items = q.pending(args.count)
+    if not items:
+        print("В очереди нет тем. Запусти: python -m shorts discover")
+        return 0
+    failures = 0
+    for item in items:
+        print(f"▶ {item.title}")
+        try:
+            out = make_short(item.url, settings)
+            q.mark(item, "done", video_dir=str(out))
+            print(f"  готово: {out / 'video.mp4'}")
+        except Exception as e:  # noqa: BLE001
+            failures += 1
+            q.mark(item, "failed", error=str(e))
+            logging.getLogger(__name__).exception("Не удалось сделать ролик: %s", item.url)
+            print(f"  ошибка: {e}")
+        q.save()
+    return 1 if failures == len(items) else 0
+
+
 def cmd_doctor(_: argparse.Namespace) -> int:
     """Проверяет, что всё нужное на месте, и подсказывает, чего не хватает."""
     from .background import list_gameplay
@@ -43,8 +101,13 @@ def cmd_doctor(_: argparse.Namespace) -> int:
     except Exception as e:  # noqa: BLE001
         report(False, f"не найден ({e})", "apt install ffmpeg или pip install imageio-ffmpeg")
 
-    print(f"LLM: {s.llm_provider}")
-    if s.llm_provider == "ollama":
+    print(f"Куратор: {s.curator_provider}")
+    if s.curator_provider == "anthropic":
+        report(bool(s.anthropic_api_key), "ANTHROPIC_API_KEY задан", "добавь ключ в .env или CURATOR_PROVIDER=ollama")
+    report(s.feeds_file.exists(), f"список лент {s.feeds_file}", "создай feeds.txt, по одной ссылке RSS в строке")
+
+    print(f"Автор: {s.writer_provider}")
+    if s.writer_provider == "ollama":
         from .llm.ollama_llm import OllamaLLM
 
         alive = OllamaLLM(s.ollama_url, s.ollama_model).is_available()
@@ -92,6 +155,18 @@ def main(argv: list[str] | None = None) -> int:
     p_make.add_argument("--background", help="конкретный файл фона вместо случайного")
     p_make.add_argument("--out", help="папка результата (по умолчанию OUT_DIR)")
     p_make.set_defaults(func=cmd_make)
+
+    p_disc = sub.add_parser("discover", help="найти и отобрать темы в очередь (куратор)")
+    p_disc.add_argument("--count", type=int, help="сколько тем отобрать (CURATOR_PICKS)")
+    p_disc.add_argument("--no-web", action="store_true", help="без веб-поиска, только RSS")
+    p_disc.set_defaults(func=cmd_discover)
+
+    p_run = sub.add_parser("run", help="сделать ролики по лучшим темам из очереди")
+    p_run.add_argument("--count", type=int, default=1, help="сколько роликов сделать за запуск")
+    p_run.set_defaults(func=cmd_run)
+
+    p_q = sub.add_parser("queue", help="показать очередь тем")
+    p_q.set_defaults(func=cmd_queue)
 
     p_doc = sub.add_parser("doctor", help="проверить окружение")
     p_doc.set_defaults(func=cmd_doctor)
