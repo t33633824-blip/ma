@@ -12,6 +12,21 @@
 
 ## Быстрый старт
 
+Одной командой (поставит uv, Python 3.12, зависимости, голос, проверит окружение):
+
+```bash
+git clone -b claude/quirky-archimedes-aj5n40 https://github.com/t33633824-blip/ma.git shorts
+cd shorts
+bash install.sh
+nano .env            # впиши ANTHROPIC_API_KEY
+./shorts.sh doctor
+```
+
+Дальше все команды через `./shorts.sh …`, активировать окружение не нужно.
+Автопилот для cron: `autopilot.sh 3` делает `discover` и три ролика.
+
+Ручная установка, если хочется по шагам:
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
