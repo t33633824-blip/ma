@@ -66,9 +66,9 @@ def build_rank_prompts(cands: list[Candidate], recent_titles: list[str], web_fin
 
 
 def curation_schema() -> dict:
-    schema = Curation.model_json_schema()
-    schema["additionalProperties"] = False
-    return schema
+    from .llm.base import strict_schema
+
+    return strict_schema(Curation.model_json_schema())
 
 
 class Curator(Protocol):

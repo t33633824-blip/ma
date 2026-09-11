@@ -43,10 +43,22 @@ def build_prompts(doc: SourceDoc, settings: Settings) -> tuple[str, str]:
     return system, user
 
 
-def script_json_schema() -> dict:
-    schema = Script.model_json_schema()
-    schema["additionalProperties"] = False
+def strict_schema(schema: dict) -> dict:
+    """Ставит additionalProperties: false на каждый объект схемы, включая вложенные в $defs.
+    Anthropic требует этого для структурированного вывода, Ollama не против."""
+    if isinstance(schema, dict):
+        if schema.get("type") == "object":
+            schema["additionalProperties"] = False
+        for v in schema.values():
+            strict_schema(v)
+    elif isinstance(schema, list):
+        for v in schema:
+            strict_schema(v)
     return schema
+
+
+def script_json_schema() -> dict:
+    return strict_schema(Script.model_json_schema())
 
 
 class LLM(Protocol):

@@ -80,3 +80,11 @@ def test_anthropic_curator_resumes_pause_turn_and_ranks():
     assert resumed["messages"][-1]["role"] == "assistant"  # продолжение без лишнего сообщения
     assert rank["output_config"]["format"]["type"] == "json_schema"
     assert "https://c.com/3" in rank["messages"][0]["content"]
+
+
+def test_curation_schema_is_strict_everywhere():
+    from shorts.curator import curation_schema
+
+    schema = curation_schema()
+    assert schema["additionalProperties"] is False
+    assert schema["$defs"]["Pick"]["additionalProperties"] is False
