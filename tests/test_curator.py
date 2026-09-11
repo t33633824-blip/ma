@@ -17,8 +17,9 @@ CURATION = {
 }
 
 
-def settings():
-    return Settings(_env_file=None, curator_picks=3)
+def settings(tmp_path=None):
+    kw = {"out_dir": tmp_path} if tmp_path else {}
+    return Settings(_env_file=None, curator_picks=3, **kw)
 
 
 def test_prompts_include_candidates_recent_and_web():
@@ -66,11 +67,11 @@ class FakeMessages:
         return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(CURATION))])
 
 
-def test_anthropic_curator_resumes_pause_turn_and_ranks():
+def test_anthropic_curator_resumes_pause_turn_and_ranks(tmp_path):
     fake = FakeMessages()
     client = SimpleNamespace(beta=SimpleNamespace(messages=fake))
     cur = AnthropicCurator("claude-opus-5", web_search=True, client=client)
-    res = cur.curate(CANDS, ["done"], settings())
+    res = cur.curate(CANDS, ["done"], settings(tmp_path))
 
     assert res.picks[0].title == "Coffee and memory"
     assert len(fake.calls) == 3
@@ -87,4 +88,27 @@ def test_curation_schema_is_strict_everywhere():
 
     schema = curation_schema()
     assert schema["additionalProperties"] is False
-    assert schema["$defs"]["Pick"]["additionalProperties"] is False
+    pick = schema["$defs"]["Pick"]
+    assert pick["additionalProperties"] is False
+    assert "minimum" not in pick["properties"]["score"] and "maximum" not in pick["properties"]["score"]
+    assert json.dumps(schema).count('"minimum"') == 0
+
+
+def test_score_is_clamped():
+    from shorts.queue import Pick
+
+    assert Pick(url="u", title="t", reason="r", hook_idea="h", score=14).score == 10
+    assert Pick(url="u", title="t", reason="r", hook_idea="h", score=0).score == 1
+
+
+def test_web_findings_cached_between_runs(tmp_path):
+    fake = FakeMessages()
+    client = SimpleNamespace(beta=SimpleNamespace(messages=fake))
+    cur = AnthropicCurator("claude-opus-5", web_search=True, client=client)
+    st = settings(tmp_path)
+    cur.curate(CANDS, [], st)
+    calls_after_first = len(fake.calls)
+    cur.curate(CANDS, [], st)
+    # второй запуск: без веб-поиска, только ранжирование
+    assert len(fake.calls) == calls_after_first + 1
+    assert "tools" not in fake.calls[-1]

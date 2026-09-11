@@ -113,8 +113,11 @@ class AnthropicCurator:
     def curate(self, cands: list[Candidate], recent_titles: list[str], settings: Settings) -> Curation:
         web = ""
         if self.web_search:
-            log.info("Куратор: веб-поиск по теме «%s»…", settings.channel_topic)
-            web = self.search_web(settings)
+            web = _cached_web_findings(settings)
+            if web is None:
+                log.info("Куратор: веб-поиск по теме «%s»…", settings.channel_topic)
+                web = self.search_web(settings)
+                _save_web_findings(settings, web)
         system, user = build_rank_prompts(cands, recent_titles, web, settings)
         response = self._create(
             max_tokens=16000,
@@ -126,6 +129,38 @@ class AnthropicCurator:
             raise RuntimeError("Куратор: модель отказалась ранжировать кандидатов")
         text = next(block.text for block in response.content if block.type == "text")
         return Curation.model_validate(json.loads(text))
+
+
+WEB_CACHE_HOURS = 6
+
+
+def _web_cache_path(settings: Settings):
+    return settings.out_dir / "curator_web_cache.json"
+
+
+def _cached_web_findings(settings: Settings) -> str | None:
+    """Результат веб-поиска хранится несколько часов: если следующий шаг упал, поиск не повторяется."""
+    import time
+
+    path = _web_cache_path(settings)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if data.get("topic") != settings.channel_topic or time.time() - data.get("ts", 0) > WEB_CACHE_HOURS * 3600:
+        return None
+    log.info("Куратор: беру результаты веб-поиска из кэша (%s)", path)
+    return data.get("text", "")
+
+
+def _save_web_findings(settings: Settings, text: str) -> None:
+    import time
+
+    path = _web_cache_path(settings)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"ts": time.time(), "topic": settings.channel_topic, "text": text}, ensure_ascii=False), encoding="utf-8")
 
 
 class OllamaCurator:

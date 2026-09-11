@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Pick(BaseModel):
@@ -15,7 +15,12 @@ class Pick(BaseModel):
     title: str = Field(description="Оригинальный заголовок")
     reason: str = Field(description="Почему это зайдёт русскоязычной аудитории, 1-2 предложения")
     hook_idea: str = Field(description="Идея крючка для первых трёх секунд, на русском")
-    score: int = Field(ge=1, le=10, description="Оценка потенциала от 1 до 10")
+    score: int = Field(description="Оценка потенциала: целое число от 1 до 10")
+
+    @field_validator("score", mode="before")
+    @classmethod
+    def _clamp(cls, v):
+        return max(1, min(10, int(v)))
 
 
 class Curation(BaseModel):

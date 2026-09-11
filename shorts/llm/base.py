@@ -43,12 +43,18 @@ def build_prompts(doc: SourceDoc, settings: Settings) -> tuple[str, str]:
     return system, user
 
 
+_UNSUPPORTED_KEYS = ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "minItems", "maxItems", "pattern", "format")
+
+
 def strict_schema(schema: dict) -> dict:
-    """Ставит additionalProperties: false на каждый объект схемы, включая вложенные в $defs.
-    Anthropic требует этого для структурированного вывода, Ollama не против."""
+    """Приводит JSON-схему к виду, который принимает структурированный вывод Anthropic:
+    additionalProperties: false на каждом объекте, без числовых и строковых ограничений
+    (они остаются в описаниях полей и проверяются pydantic после ответа). Ollama такая схема тоже устраивает."""
     if isinstance(schema, dict):
         if schema.get("type") == "object":
             schema["additionalProperties"] = False
+        for key in _UNSUPPORTED_KEYS:
+            schema.pop(key, None)
         for v in schema.values():
             strict_schema(v)
     elif isinstance(schema, list):
