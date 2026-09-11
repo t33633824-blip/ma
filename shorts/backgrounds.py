@@ -37,6 +37,7 @@ class Ball:
     vy: float
     r: float
     hue: float
+    grow: float = 1.0  # +1 растёт при ударах, -1 плавно уменьшается
 
 
 def _hsv(h: float, s: float = 0.9, v: float = 1.0) -> tuple[int, int, int]:
@@ -123,7 +124,18 @@ def _scene_bounce(enc: _Encoder, rng: random.Random, seconds: float, width: int,
                 b.vx *= 1.002
                 b.vy *= 1.002
                 b.hue += 0.07
-                b.r = b.r + 1.4 if b.r < max_r else rng.uniform(16, 24)
+                if b.grow > 0:
+                    b.r += 1.4
+                    if b.r >= max_r:
+                        b.grow = -1.0  # дорос: дальше плавно сдувается, без скачка
+            if b.grow < 0:
+                b.r -= 0.12
+                if b.r <= 18:
+                    b.grow = 1.0
+            speed = math.hypot(b.vx, b.vy)
+            if speed > 26:  # не даём разогнаться до мельтешения
+                b.vx *= 26 / speed
+                b.vy *= 26 / speed
             draw.ellipse((b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r), fill=_hsv(b.hue))
         arr = np.asarray(layer, dtype=np.float32)
         trail = np.maximum(trail, arr)
@@ -139,28 +151,34 @@ def _scene_split(enc: _Encoder, rng: random.Random, seconds: float, width: int, 
     bg = _gradient_bg(width, height, base_hue + 0.5)
     trail = np.zeros((height, width, 3), dtype=np.float32)
 
-    def fresh() -> list[Ball]:
-        return [Ball(cx, cy - ring_r * 0.3, rng.uniform(-4, 4), 0.0, 22, base_hue)]
-
-    objs = fresh()
+    objs = [Ball(cx, cy - ring_r * 0.3, rng.uniform(-4, 4), 0.0, 26, base_hue)]
+    shrink = 0.03  # каждый шарик медленно тает; исчезнув, освобождает место новым
     for frame in range(int(seconds * fps)):
         trail *= 0.9
         layer = Image.new("RGB", (width, height))
         draw = ImageDraw.Draw(layer)
         draw.ellipse((cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r), outline=_hsv(base_hue + frame * 0.0005, 0.5, 1.0), width=10)
         spawned: list[Ball] = []
+        alive: list[Ball] = []
         for b in objs:
             b.vy += gravity
             b.x += b.vx
             b.y += b.vy
+            speed = math.hypot(b.vx, b.vy)
+            if speed > 24:
+                b.vx *= 24 / speed
+                b.vy *= 24 / speed
             if _bounce_in_ring(b, cx, cy, ring_r) and len(objs) + len(spawned) < max_balls:
                 ang = rng.uniform(0, math.tau)
-                spd = math.hypot(b.vx, b.vy) * rng.uniform(0.7, 1.1)
-                spawned.append(Ball(b.x, b.y, math.cos(ang) * spd, math.sin(ang) * spd, max(10, b.r * 0.92), b.hue + rng.uniform(0.05, 0.15)))
-            draw.ellipse((b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r), fill=_hsv(b.hue))
-        objs.extend(spawned)
-        if len(objs) >= max_balls and frame % (fps * 4) == 0:
-            objs = fresh()  # экран заполнился, начинаем заново
+                spd = speed * rng.uniform(0.7, 1.1)
+                spawned.append(Ball(b.x, b.y, math.cos(ang) * spd, math.sin(ang) * spd, max(14, b.r * 0.95), b.hue + rng.uniform(0.05, 0.15)))
+            b.r -= shrink
+            if b.r > 4:
+                alive.append(b)
+                draw.ellipse((b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r), fill=_hsv(b.hue))
+        objs = alive + spawned
+        if not objs:  # всё растаяло, тихо запускаем новый шарик
+            objs = [Ball(cx, cy - ring_r * 0.3, rng.uniform(-4, 4), 0.0, 26, base_hue + frame * 0.0005)]
         arr = np.asarray(layer, dtype=np.float32)
         trail = np.maximum(trail, arr)
         enc.write(bg + trail + _glow(layer, 14))

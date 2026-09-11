@@ -30,7 +30,8 @@ def render_video(
     )
     cmd = [ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error"]
     if bg.path:
-        cmd += ["-ss", f"{bg.start:.2f}", "-t", f"{total:.2f}", "-i", bg.path]
+        # -stream_loop -1: если фон короче ролика, он повторяется, а не обрывается
+        cmd += ["-stream_loop", "-1", "-ss", f"{bg.start:.2f}", "-t", f"{total:.2f}", "-i", bg.path]
     else:
         cmd += ["-f", "lavfi", "-t", f"{total:.2f}", "-i", f"testsrc2=size={width}x{height}:rate={fps}"]
     cmd += [

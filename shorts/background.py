@@ -33,7 +33,9 @@ def pick_background(gameplay_dir: Path, need_seconds: float, forced: str | None 
         return BackgroundClip(path=None, start=0.0, duration=need_seconds)
     path = rng.choice(files)
     total = media_duration(str(path))
-    if total <= need_seconds:
+    need = need_seconds + 1.0  # запас на хвост ролика
+    if total <= need:
+        log.warning("Фон %s короче ролика (%.0f c < %.0f c), будет зациклен", path.name, total, need)
         return BackgroundClip(path=str(path), start=0.0, duration=need_seconds)
-    start = rng.uniform(0.0, total - need_seconds)
+    start = rng.uniform(0.0, total - need)
     return BackgroundClip(path=str(path), start=round(start, 2), duration=need_seconds)
