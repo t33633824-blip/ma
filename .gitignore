@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+out/
+models/
+assets/gameplay/*
+!assets/gameplay/README.md
+.pytest_cache/
