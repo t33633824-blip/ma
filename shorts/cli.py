@@ -118,6 +118,55 @@ def cmd_video(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_data(args: argparse.Namespace) -> int:
+    """Перенос тяжёлых данных на другой диск и запись DATA_DIR в .env."""
+    import shutil
+    from pathlib import Path
+
+    from .config import DATA_RELATIVE_FIELDS, Settings
+
+    target = Path(args.path).expanduser().resolve()
+    if args.action == "show":
+        s = load_settings()
+        print(f"DATA_DIR = {s.data_dir.resolve()}")
+        for name in DATA_RELATIVE_FIELDS:
+            p = Path(getattr(s, name))
+            size = sum(f.stat().st_size for f in p.rglob("*") if f.is_file()) / 1e9 if p.exists() else 0
+            print(f"  {name:16s} {p}  ({size:.1f} ГБ)")
+        return 0
+
+    target.mkdir(parents=True, exist_ok=True)
+    old = Settings()  # текущие пути (возможно уже под старым DATA_DIR)
+    moved = 0
+    for name in DATA_RELATIVE_FIELDS:
+        src = Path(getattr(old, name))
+        default_rel = Path(Settings.model_fields[name].default)
+        dst = target / default_rel
+        if not src.exists() or src.resolve() == dst.resolve():
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if dst.exists():
+            for item in src.iterdir():
+                shutil.move(str(item), str(dst / item.name))
+            shutil.rmtree(src, ignore_errors=True)
+        else:
+            shutil.move(str(src), str(dst))
+        print(f"перенёс {src} -> {dst}")
+        moved += 1
+    for parent in ("models", "assets"):  # пустые оболочки после переноса
+        pp = Path(parent)
+        if pp.is_dir() and not any(pp.iterdir()):
+            pp.rmdir()
+    env = Path(".env")
+    lines = env.read_text(encoding="utf-8").splitlines() if env.exists() else []
+    lines = [l for l in lines if not l.startswith("DATA_DIR=")]
+    lines.append(f"DATA_DIR={target}")
+    env.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"DATA_DIR={target} записан в .env, перенесено папок: {moved}")
+    print("Проверка: ./shorts.sh data show")
+    return 0
+
+
 def cmd_doctor(_: argparse.Namespace) -> int:
     """Проверяет, что всё нужное на месте, и подсказывает, чего не хватает."""
     from .background import list_gameplay
@@ -130,6 +179,15 @@ def cmd_doctor(_: argparse.Namespace) -> int:
         nonlocal ok
         ok = ok and good
         print(("  ✓ " if good else "  ✗ ") + msg + (f"\n      → {hint}" if hint and not good else ""))
+
+    print(f"Данные: {s.data_dir.resolve()}")
+    try:
+        import shutil as _sh
+
+        free = _sh.disk_usage(s.data_dir if s.data_dir.exists() else ".").free / 1e9
+        report(free > 30, f"свободно {free:.0f} ГБ", "для видеомоделей нужно 30+ ГБ; перенеси данные: ./shorts.sh data move /путь")
+    except OSError as e:  # noqa: BLE001
+        report(False, f"папка недоступна ({e})")
 
     print("ffmpeg")
     try:
@@ -243,6 +301,13 @@ def main(argv: list[str] | None = None) -> int:
     p_vw = vid_sub.add_parser("warm", help="скачать и загрузить модель заранее")
     p_vw.add_argument("--model", choices=["wan22-5b", "wan21-1.3b", "wan21-14b"])
     p_vid.set_defaults(func=cmd_video, prompt=None, seconds=5.0, seed=None)
+
+    p_data = sub.add_parser("data", help="где лежат тяжёлые данные и перенос на другой диск")
+    data_sub = p_data.add_subparsers(dest="action", required=True)
+    data_sub.add_parser("show", help="показать пути и размеры")
+    p_dm = data_sub.add_parser("move", help="перенести модели, клипы, фоны и ролики в папку и прописать DATA_DIR")
+    p_dm.add_argument("path", help="папка на отдельном диске, например /mnt/gen/shorts-data")
+    p_data.set_defaults(func=cmd_data, path=".")
 
     p_doc = sub.add_parser("doctor", help="проверить окружение")
     p_doc.set_defaults(func=cmd_doctor)

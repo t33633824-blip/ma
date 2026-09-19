@@ -42,11 +42,14 @@ fi
 say "5/6 Русский голос Piper"
 VOICE=$(grep -E '^PIPER_VOICE=' .env | cut -d= -f2- || true)
 VOICE=${VOICE:-ru_RU-irina-medium}
-if [ -f "models/piper/$VOICE.onnx" ]; then
+DATA_DIR=$(grep -E '^DATA_DIR=' .env | cut -d= -f2- || true)
+DATA_DIR=${DATA_DIR:-.}
+PIPER_DIR="$DATA_DIR/models/piper"
+if [ -f "$PIPER_DIR/$VOICE.onnx" ]; then
   echo "уже скачан"
 else
-  mkdir -p models/piper
-  .venv/bin/python -m piper.download_voices --download-dir models/piper "$VOICE"
+  mkdir -p "$PIPER_DIR"
+  .venv/bin/python -m piper.download_voices --download-dir "$PIPER_DIR" "$VOICE"
 fi
 
 say "6/6 Ollama"

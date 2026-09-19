@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Пути, которые по умолчанию живут внутри DATA_DIR (тяжёлые данные: модели, клипы, ролики)
+DATA_RELATIVE_FIELDS = ("out_dir", "gameplay_dir", "clips_dir", "piper_dir", "whisper_dir", "video_models_dir")
 
 
 class Settings(BaseSettings):
     """Все настройки читаются из .env или переменных окружения."""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # Куда складывать всё тяжёлое. "." = рядом с кодом. Например отдельный диск: /mnt/gen/shorts-data
+    data_dir: Path = Path(".")
 
     # Куратор: ищет и отбирает темы (по умолчанию Claude с веб-поиском)
     curator_provider: Literal["anthropic", "ollama"] = "anthropic"
@@ -84,5 +92,24 @@ class Settings(BaseSettings):
     target_seconds: int = 50
 
 
+    @model_validator(mode="after")
+    def _rebase_paths(self):
+        """Пути, которые не заданы явно, переносим под DATA_DIR."""
+        base = self.data_dir
+        if str(base) not in (".", ""):
+            for name in DATA_RELATIVE_FIELDS:
+                if name not in self.model_fields_set:
+                    setattr(self, name, base / getattr(self, name))
+        return self
+
+    @property
+    def hf_home(self) -> Path:
+        return self.data_dir / "models" / "hf"
+
+
 def load_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    # кэш Hugging Face (whisper, токенизаторы) тоже на диск с данными, если пользователь не задал свой
+    if str(s.data_dir) not in (".", ""):
+        os.environ.setdefault("HF_HOME", str(s.hf_home))
+    return s
