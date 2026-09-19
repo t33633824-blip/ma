@@ -101,6 +101,23 @@ def cmd_backgrounds(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_video(args: argparse.Namespace) -> int:
+    """Проверка генерации видео: один клип по промпту (или скачать модель заранее)."""
+    from .videogen import get_videogen
+
+    settings = load_settings()
+    if args.model:
+        settings.video_model = args.model
+    gen = get_videogen(settings)
+    if args.action == "warm":
+        gen._load()  # noqa: SLF001
+        print("Модель скачана и загружается, можно делать ролики")
+        return 0
+    clip = gen.generate(args.prompt, seconds=args.seconds, seed=args.seed)
+    print(clip)
+    return 0
+
+
 def cmd_doctor(_: argparse.Namespace) -> int:
     """Проверяет, что всё нужное на месте, и подсказывает, чего не хватает."""
     from .background import list_gameplay
@@ -147,9 +164,23 @@ def cmd_doctor(_: argparse.Namespace) -> int:
     else:
         report(True, f"edge-tts голос {s.edge_voice}")
 
-    print("Фон")
+    print(f"Фон: {s.background_mode}")
+    if s.background_mode == "generated":
+        try:
+            import torch  # noqa: F401
+
+            import diffusers  # noqa: F401
+
+            ok_cuda = torch.cuda.is_available()
+            name = torch.cuda.get_device_name(0) if ok_cuda else "нет CUDA"
+            mem = torch.cuda.mem_get_info()[1] / 1e9 if ok_cuda else 0
+            report(ok_cuda, f"видеокарта {name}, {mem:.0f} ГБ, пресет {s.video_model}", "нужна NVIDIA с драйвером CUDA")
+            if ok_cuda and mem < 20 and s.video_model == "wan22-5b":
+                print("      → для карт меньше 20 ГБ поставь VIDEO_MODEL=wan21-1.3b")
+        except ImportError:
+            report(False, "torch и diffusers", "bash install.sh --video")
     clips = list_gameplay(s.gameplay_dir)
-    report(bool(clips), f"{len(clips)} видео в {s.gameplay_dir}", "положи mp4 с геймплеем, иначе будет тестовая заглушка")
+    report(bool(clips) or s.background_mode == "generated", f"{len(clips)} видео в {s.gameplay_dir}", "положи mp4 или сгенерируй: ./shorts.sh backgrounds generate")
 
     print("Шрифт")
     fc = shutil.which("fc-list")
@@ -201,6 +232,17 @@ def main(argv: list[str] | None = None) -> int:
     p_fetch.add_argument("--query", default="satisfying", help="поисковый запрос, например: satisfying, slime, kinetic sand, hydraulic press, ocean waves")
     p_fetch.add_argument("--count", type=int, default=10)
     p_bg.set_defaults(func=cmd_backgrounds)
+
+    p_vid = sub.add_parser("video", help="генерация видео нейросетью: проверить или прогреть модель")
+    vid_sub = p_vid.add_subparsers(dest="action", required=True)
+    p_vt = vid_sub.add_parser("test", help="сгенерировать один клип по промпту")
+    p_vt.add_argument("prompt")
+    p_vt.add_argument("--seconds", type=float, default=5.0)
+    p_vt.add_argument("--seed", type=int)
+    p_vt.add_argument("--model", choices=["wan22-5b", "wan21-1.3b", "wan21-14b"])
+    p_vw = vid_sub.add_parser("warm", help="скачать и загрузить модель заранее")
+    p_vw.add_argument("--model", choices=["wan22-5b", "wan21-1.3b", "wan21-14b"])
+    p_vid.set_defaults(func=cmd_video, prompt=None, seconds=5.0, seed=None)
 
     p_doc = sub.add_parser("doctor", help="проверить окружение")
     p_doc.set_defaults(func=cmd_doctor)

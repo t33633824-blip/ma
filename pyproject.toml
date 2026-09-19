@@ -19,6 +19,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+video = [
+    "torch>=2.4",
+    "diffusers>=0.35",
+    "transformers>=4.45",
+    "accelerate>=1.0",
+    "ftfy",
+    "sentencepiece",
+    "protobuf",
+    "imageio",
+]
 
 [project.scripts]
 shorts = "shorts.cli:main"

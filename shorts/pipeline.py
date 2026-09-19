@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .align import align_script_to_timings, split_words, transcribe_words
 from .audio import compress_pauses, remap_words
-from .background import pick_background
+from .background import BackgroundClip, pick_background
 from .config import Settings
 from .ffmpeg import media_duration
 from .llm import get_writer
@@ -92,7 +92,14 @@ def make_short(
     subs = work / "subs.ass"
     subs.write_text(ass, encoding="utf-8")
 
-    bg = pick_background(settings.gameplay_dir, duration, forced=background)
+    bg = None
+    if settings.background_mode == "generated" and not background:
+        try:
+            bg = generate_background_for(script, words, duration, work, settings)
+        except Exception as e:  # noqa: BLE001
+            log.exception("Генерация сцен не удалась (%s), беру фон из %s", e, settings.gameplay_dir)
+    if bg is None:
+        bg = pick_background(settings.gameplay_dir, duration, forced=background)
     out_mp4 = str(work / "video.mp4")
     render_video(bg, wav, str(subs), out_mp4, settings.video_width, settings.video_height)
 
@@ -111,6 +118,31 @@ def make_short(
     (work / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     log.info("Готово за %.0f c: %s", meta["elapsed_seconds"], out_mp4)
     return work
+
+
+def generate_background_for(script: Script, words: list[WordTiming], duration: float, work: Path, settings: Settings) -> BackgroundClip:
+    """Раскадровка -> клипы нейросетью -> склейка под длину озвучки."""
+    from .llm import get_writer
+    from .storyboard import plan_scenes, segment_words
+    from .videogen import get_videogen
+    from .videogen.assemble import assemble_clips
+
+    segments = segment_words(words, target=settings.video_scene_seconds, max_len=settings.video_scene_seconds + 2.5, total=duration)
+    prompts = plan_scenes(get_writer(settings), script, segments, settings)
+    storyboard = [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text, "prompt": p} for s, p in zip(segments, prompts)]
+    (work / "storyboard.json").write_text(json.dumps(storyboard, ensure_ascii=False, indent=1), encoding="utf-8")
+    log.info("Раскадровка: %d сцен", len(segments))
+
+    gen = get_videogen(settings)
+    clips: list[tuple[str, float]] = []
+    for i, (seg, prompt) in enumerate(zip(segments, prompts), 1):
+        log.info("Сцена %d/%d (%.1f c)", i, len(segments), seg.duration)
+        seed = settings.video_seed + i if settings.video_seed else None
+        clip = gen.generate(prompt, seconds=min(seg.duration, settings.video_scene_seconds + 1), seed=seed)
+        clips.append((str(clip), seg.duration))
+    bg_path = str(work / "background.mp4")
+    assemble_clips(clips, bg_path, settings.video_width, settings.video_height)
+    return BackgroundClip(path=bg_path, start=0.0, duration=duration)
 
 
 def words_from_json(path: str) -> list[WordTiming]:

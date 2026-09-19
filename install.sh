@@ -23,7 +23,13 @@ else
 fi
 
 say "3/6 Зависимости"
-uv pip install --python .venv/bin/python -e ".[dev]"
+if [ "${1:-}" = "--video" ]; then
+  echo "с генерацией видео (torch, diffusers: несколько ГБ)"
+  uv pip install --python .venv/bin/python -e ".[dev,video]"
+else
+  uv pip install --python .venv/bin/python -e ".[dev]"
+  echo "(генерация видео нейросетью не установлена; для неё: bash install.sh --video)"
+fi
 
 say "4/6 Файл настроек .env"
 if [ -f .env ]; then

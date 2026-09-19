@@ -58,8 +58,20 @@ class Settings(BaseSettings):
     whisper_dir: Path = Path("models/whisper")
 
     # Video
+    background_mode: Literal["gameplay", "generated"] = "gameplay"
     gameplay_dir: Path = Path("assets/gameplay")
     pexels_api_key: str = ""
+
+    # Генерация видео по сценам (BACKGROUND_MODE=generated)
+    video_provider: Literal["wan"] = "wan"
+    video_model: str = "wan22-5b"  # wan22-5b | wan21-1.3b | wan21-14b
+    video_steps: int = 0  # 0 = значение пресета
+    video_offload: bool = True
+    video_seed: int = 0  # 0 = случайно каждый раз
+    video_scene_seconds: float = 5.0  # целевая длина сцены
+    video_style: str = "cinematic realistic footage, soft natural light, shallow depth of field, muted colors, film grain"
+    video_models_dir: Path = Path("models/video")
+    clips_dir: Path = Path("assets/clips")
     out_dir: Path = Path("out")
     video_width: int = 1080
     video_height: int = 1920

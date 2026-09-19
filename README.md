@@ -67,6 +67,22 @@ python -m shorts make https://example.com/some-article   # или один ро�
 
 Модель whisper (`small`, ~460 МБ) скачается сама при первом запуске.
 
+## Фон, сгенерированный нейросетью
+
+Вместо геймплея ролик можно собирать из сцен, которые видеомодель рисует под каждую фразу озвучки
+(локально, модели Wan с лицензией Apache 2.0, нужна видеокарта NVIDIA):
+
+```bash
+bash install.sh --video                 # torch + diffusers
+./shorts.sh video test "slow push-in on a steaming cup of coffee on a wooden table, morning light"
+sed -i 's/^BACKGROUND_MODE=.*/BACKGROUND_MODE=generated/' .env
+./shorts.sh run --count 1
+```
+
+Первый запуск скачивает модель (около 20 ГБ для `wan22-5b`). Клипы кэшируются в `assets/clips`,
+раскадровка каждого ролика лежит в `storyboard.json` рядом с видео. Если генерация падает,
+конвейер молча берёт фон из `assets/gameplay`.
+
 ## Как это устроено
 
 ```
@@ -78,6 +94,8 @@ llm/         ─ сценарий по строгой JSON-схеме: Ollama (�
 tts/         ─ голос: Piper (локально), edge-tts (бесплатно, облако), ElevenLabs (платно)
 align.py     ─ тайминги слов: faster-whisper слушает озвучку, слова сценария получают время
 subtitles.py ─ ASS-субтитры по 3 слова, текущее слово подсвечено
+storyboard.py─ режет озвучку на сцены по 5-7 с, модель пишет промпт для каждой
+videogen/    ─ генерация клипов (Wan локально) и склейка под озвучку
 backgrounds.py─ генератор анимации «шарики в кольце» и загрузчик стоковых роликов с Pexels
 background.py─ случайный фрагмент случайного файла из assets/gameplay
 render.py    ─ ffmpeg: кроп до 9:16, наложение субтитров, микс с голосом
